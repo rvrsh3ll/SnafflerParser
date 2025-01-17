@@ -73,3 +73,9 @@ This allows easy access to the shares without authenticate for every share via t
 ![Explorer++ Bookmarks](/images/explorerpp_bookmarks.png "Explorer++ Bookmarks")
 
 
+## Changelog
+
+### 2025-01-17
+
+#### Fixed
+- Issue #2: Fixed: Spaces breaking in the open or download links

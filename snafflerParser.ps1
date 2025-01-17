@@ -762,8 +762,8 @@ $files = foreach ($line in $data) {
 			unc = $line.9
 			extension = [System.IO.Path]::GetExtension($($line.9))
 			#Since HTML chars are encoded to entities, special strings are used and replaced later
-			open = "@@o@@a href=$(Split-Path -Parent $($line.9))\ @@c@@@@o@@span style='font-size:100px;'@@c@@@@a@@#x1F4C2;@@o@@/span@@c@@"
-			save = "@@o@@a href=$($line.9) download@@c@@@@o@@span style='font-size:100px;'@@c@@@@a@@#x1F4BE;@@o@@/span@@c@@"
+			open = "@@o@@a target=_blank href=file://$($(Split-Path -Parent $($line.9)).Replace(' ','%20'))\ @@c@@@@o@@span style='font-size:100px;'@@c@@@@a@@#x1F4C2;@@o@@/span@@c@@"
+			save = "@@o@@a target=_blank href=file://$($($line.9).Replace(' ','%20')) download@@c@@@@o@@span style='font-size:100px;'@@c@@@@a@@#x1F4BE;@@o@@/span@@c@@"
 			content = $line.10
 		}
     }

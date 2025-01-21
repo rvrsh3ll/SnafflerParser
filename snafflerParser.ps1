@@ -23,6 +23,10 @@
 	- rule: Snaffler rule name
 	.Parameter split
 	Will create splitted (by severity black, red, yellow, green) export files
+	.Parameter lightmode
+	Generates a brighter HTML report (default is dark mode)
+	.Parameter unescape
+	Experimental: Unescape the preview text, making it better readable but larger.
 	.Parameter gridview
 	Analyze the file and display in PS gridview
 	.Parameter gridviewload
@@ -37,16 +41,16 @@
 	Run Snaffler and execute parser with default settings.
 	.Example
 	.\snafflerparser.ps1 
-	(will try to load snafflerout.txt and output in TXT format)
+	(will try to load snafflerout.txt and output in HTML, CSV and TXT format)
 	.Example
 	.\snafflerparser.ps1 -in mysnaffleroutput.tvs
-	(will try to load mysnaffleroutput.tvs and output in TXT format)
+	(will try to load mysnaffleroutput.tvs in HTML, CSV and TXT format)
 	.Example
 	.\snafflerparser.ps1 outformat csv -split
 	(will store results as CSV and split the files by severity)
 	.Example
-	.\snafflerparser.ps1 -sort unc
-	(will sort by the column unc)
+	.\snafflerparser.ps1 -sort unc -unescape -lightmode
+	(will sort by the column unc, unescape the preview text and generate a brighter HTML report)
 	.Example
 	.\snafflerparser.ps1 -gridview
 	(Will  additionally show the output in PS Gridview and save the gridview for later use)
@@ -87,7 +91,11 @@ Param (
 	[switch]
 	$snaffel,
 	[switch]
-	$help
+	$unescape,
+	[switch]
+	$help,
+	[switch]
+	$LightMode = $false
 )
 
 # Function section-----------------------------------------------------------------------------------
@@ -237,301 +245,432 @@ function exportjson($object ,$name){
 # Function to export as HTML
 function exporthtml($object ,$name){
 $Header = @"
-<style>
-    h2 {
-        font-family: Arial, Helvetica, sans-serif;
-        color: #000099;
-        font-size: 20px;
-        font-weight: bold;
-    }
-	table {
-		font-size: 14px;
-		border: 0px; 
-		font-family: Arial, Helvetica, sans-serif;
-	} 
-
-    td {
-		padding: 4px;
-		margin: 0px;
-		border: 0;
-	}
-	
-    th {
-        background: #395870;
-        background: linear-gradient(#49708f, #293f50);
-        color: #fff;
-        font-size: 11px;
-        padding: 5px 7px;
-        vertical-align: middle;
-        position: sticky;
-		top: 0;
-		cursor: pointer;
-	}
-
-    tbody tr:nth-child(even) {
-        background: #f0f0f2;
-    }
-
-    tbody tr:hover td {
-        background-color: lightblue;
-    }
-
-</style>
 <script>
-document.addEventListener("DOMContentLoaded", function() {
-    var tables = document.getElementsByTagName("table");
+	//This stuff gives me headache...
+	document.addEventListener("DOMContentLoaded", function() {
 
-    if (tables.length > 1) {
-        var table = tables[1]; // Select the second table
-        var headers = table.getElementsByTagName("th");
-        var sortDirections = Array(headers.length).fill("asc"); // Track sort direction for each column
+		//Function to get current filename for the HTML save function
+		function getCurrentFileName() {
+			// Get the full path of the current URL
+			const path = window.location.pathname;
 
-        // Find the column index of the "Extension" and "Severity" columns
-        var extensionColumnIndex = -1;
-        var severityColumnIndex = -1;
+			// Extract the file name from the path (e.g., "snafflerout.html")
+			return path.substring(path.lastIndexOf('/') + 1);
+		}
+		
+		//Function to save current HTML file
+        function saveStateToHTML() {
+            // Get the current HTML
+            const html = document.documentElement.outerHTML;
 
-        for (let i = 0; i < headers.length; i++) {
-            let headerText = headers[i].innerText.toLowerCase();
-            if (headerText === "extension") {
-                extensionColumnIndex = i;
-            }
-            if (headerText === "severity") {
-                severityColumnIndex = i;
-            }
+            // Create a Blob with the HTML content
+            const blob = new Blob([html], { type: "text/html" });
+
+            // Generate the new file name based on the current file name
+            const currentFileName = getCurrentFileName();
+            const newFileName = currentFileName.replace(/\.html$/, "") + "_save.html";
+
+            // Create a download link
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = newFileName;
+            link.click();
         }
 
-        if (severityColumnIndex !== -1) {
-            generateSeverityFilterMenu(table, severityColumnIndex);
-        }
-
-        if (extensionColumnIndex !== -1) {
-            generateFilterMenu(table, extensionColumnIndex);
-        }
-
-        if (headers.length > 0) { // Check if the second table has headers
-            // Loop through the headers and add the onclick event
-            for (let i = 0; i < headers.length; i++) {
-                headers[i].addEventListener("click", function() {
-                    sortTable(table, i, sortDirections[i]);
-                    // Toggle sort direction for the next click
-                    sortDirections[i] = sortDirections[i] === "asc" ? "desc" : "asc";
-                });
-            }
-        }
-    }
-
-    function sortTable(table, columnIndex, direction) {
-        var rows = Array.from(table.rows).slice(1); // Convert HTMLCollection to array and skip the header row
-
-        // Define custom order for the first column
-        var customOrder = ["Black", "Red", "Yellow", "Green"];
-
-        // Custom sorting function
-        rows.sort(function(rowA, rowB) {
-            var x = rowA.cells[columnIndex].innerText.trim();
-            var y = rowB.cells[columnIndex].innerText.trim();
-
-            if (columnIndex === 0) {
-                // Custom sorting logic for the first column
-                var xIndex = customOrder.indexOf(x);
-                var yIndex = customOrder.indexOf(y);
-                return direction === "asc" ? xIndex - yIndex : yIndex - xIndex;
-            } else {
-                // Alphabetical sorting for other columns
-                return direction === "asc" ? x.localeCompare(y) : y.localeCompare(x);
-            }
-        });
-
-        // Rebuild the table
-        var fragment = document.createDocumentFragment();
-        rows.forEach(function(row) {
-            fragment.appendChild(row);
-        });
-
-        table.tBodies[0].appendChild(fragment);
-    }
-
-    function generateSeverityFilterMenu(table, severityColumnIndex) {
-        var filterMenu = document.getElementById("filter-menu");
-        filterMenu.innerHTML = ''; // Clear previous content
-
-        var severityLevels = ["Black", "Red", "Yellow", "Green"];
-
-        // Create severity filter checkboxes
-        severityLevels.forEach(function(severity) {
-            var label = document.createElement("label");
-            label.style.display = "inline-block";
-            label.style.marginRight = "10px";
-
-            var checkbox = document.createElement("input");
-            checkbox.type = "checkbox";
-            checkbox.value = severity;
-            checkbox.checked = true; // Default to checked
-
-            label.appendChild(checkbox);
-            label.appendChild(document.createTextNode(severity));
-            filterMenu.appendChild(label);
-        });
-
-        // Add a line break and horizontal separator before the extension filter menu
-        filterMenu.appendChild(document.createElement("br"));
-        filterMenu.appendChild(document.createElement("hr"));
-    }
-
-    function generateFilterMenu(table, extensionColumnIndex) {
-        var filterMenu = document.getElementById("filter-menu");
-
-        var uniqueExtensions = new Set();
-
-        // Collect unique extensions from the table, case insensitive
-        Array.from(table.rows).slice(1).forEach(function(row) {
-            var extension = row.cells[extensionColumnIndex].innerText.trim().toLowerCase();
-            if (extension) {
-                uniqueExtensions.add(extension);
-            }
-        });
-
-        // Convert Set to Array and sort alphabetically (case-insensitive)
-        var sortedExtensions = Array.from(uniqueExtensions).sort((a, b) => a.localeCompare(b));
-
-        // Create checkboxes for each sorted extension
-        sortedExtensions.forEach(function(extension) {
-            var label = document.createElement("label");
-            label.style.display = "inline-block"; // Display inline for horizontal layout
-            label.style.marginRight = "10px"; // Add some space between labels
-
-            var checkbox = document.createElement("input");
-            checkbox.type = "checkbox";
-            checkbox.className = "extension-checkbox"; // Add class to distinguish from severity checkboxes
-            checkbox.value = extension;
-            checkbox.checked = true; // Default to checked
-
-            label.appendChild(checkbox);
-            label.appendChild(document.createTextNode(extension));
-            filterMenu.appendChild(label);
-        });
-
-        // Create a container for the buttons
-        var buttonContainer = document.createElement("div");
-        buttonContainer.style.marginTop = "10px"; // Add space above the container
-        buttonContainer.style.display = "flex"; // Align buttons in a single line
-        buttonContainer.style.gap = "10px"; // Add space between buttons
-
-        // Add "Select All" button
-        var selectAllButton = document.createElement("button");
-        selectAllButton.innerText = "Select All";
-        selectAllButton.addEventListener("click", function() {
-            setAllExtensionCheckboxes(true);
-        });
-        buttonContainer.appendChild(selectAllButton);
-
-        // Add "Deselect All" button
-        var deselectAllButton = document.createElement("button");
-        deselectAllButton.innerText = "Deselect All";
-        deselectAllButton.addEventListener("click", function() {
-            setAllExtensionCheckboxes(false);
-        });
-        buttonContainer.appendChild(deselectAllButton);
-
-        filterMenu.appendChild(buttonContainer);
-
-		// Line
-		filterMenu.appendChild(document.createElement("br"));
-        filterMenu.appendChild(document.createElement("hr"));
-
-        // Add one "Apply Filter" button at the end of the filter menu
-        var applyButton = document.createElement("button");
-        applyButton.innerText = "Apply Filter";
-        applyButton.style.marginTop = "5px"; // Add some space above the button
-        applyButton.addEventListener("click", function() {
-            applyFilters(table, extensionColumnIndex, severityColumnIndex);
-        });
-        filterMenu.appendChild(applyButton);
-
-        // Add a display for the row count below the apply button
-        var rowCountDisplay = document.createElement("div");
-        rowCountDisplay.id = "row-count";
-        rowCountDisplay.style.marginTop = "15px"; // Space between button and row count
-        filterMenu.appendChild(rowCountDisplay);
-
-        updateRowCount(table);
-    }
-
-    function setAllExtensionCheckboxes(checked) {
-        var checkboxes = document.querySelectorAll("#filter-menu input.extension-checkbox");
-        checkboxes.forEach(function(checkbox) {
-            checkbox.checked = checked;
-        });
-    }
-
-    function applyFilters(table, extensionColumnIndex, severityColumnIndex) {
-        showLoadingIndicator();
-
-        setTimeout(function() { // Simulate processing time
-            var severityCheckboxes = document.querySelectorAll("#filter-menu input[type='checkbox'][value]");
-            var selectedSeverities = Array.from(severityCheckboxes)
-                                          .filter(checkbox => checkbox.checked)
-                                          .map(checkbox => checkbox.value);
-
-            var extensionCheckboxes = document.querySelectorAll("#filter-menu input.extension-checkbox");
-            var selectedExtensions = Array.from(extensionCheckboxes)
-                                          .filter(checkbox => checkbox.checked)
-                                          .map(checkbox => checkbox.value);
-
-            // Apply filters in a single pass
-            Array.from(table.rows).slice(1).forEach(function(row) {
-                var severity = row.cells[severityColumnIndex].innerText.trim();
-                var extension = row.cells[extensionColumnIndex].innerText.trim().toLowerCase();
-
-                var showRow = selectedSeverities.includes(severity) && selectedExtensions.includes(extension);
-                row.style.display = showRow ? "" : "none";
+        function updateCheckboxState() {
+            // Update the `checked` attributes in the DOM
+            document.querySelectorAll("input[type='checkbox']").forEach(checkbox => {
+                if (checkbox.checked) {
+                    checkbox.setAttribute("checked", "checked");
+                } else {
+                    checkbox.removeAttribute("checked");
+                }
             });
-
-            updateRowCount(table);
-
-            hideLoadingIndicator();
-        }, 0); // Execute after a short delay
-    }
-
-    function showLoadingIndicator() {
-        var loadingIndicator = document.createElement("div");
-        loadingIndicator.id = "loading-indicator";
-        loadingIndicator.innerText = "Filtering, please wait...";
-        loadingIndicator.style.position = "fixed";
-        loadingIndicator.style.top = "50%";
-        loadingIndicator.style.left = "50%";
-        loadingIndicator.style.transform = "translate(-50%, -50%)";
-        loadingIndicator.style.padding = "20px";
-        loadingIndicator.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
-        loadingIndicator.style.color = "white";
-        loadingIndicator.style.borderRadius = "5px";
-        loadingIndicator.style.zIndex = "1000";
-        document.body.appendChild(loadingIndicator);
-    }
-
-    function hideLoadingIndicator() {
-        var loadingIndicator = document.getElementById("loading-indicator");
-        if (loadingIndicator) {
-            loadingIndicator.remove();
         }
-    }
 
-	function updateRowCount(table) {
-		var totalRowCount = table.rows.length - 1; // Subtract 1 to exclude the header row
-		var visibleRowCount = Array.from(table.rows).slice(1).filter(row => row.style.display !== "none").length;
+		//Get the 2nd table
+    	var tables = document.getElementsByTagName("table");
+		if (tables.length > 1) {
+			var table = tables[1]; // Select the second table
+			var headers = table.getElementsByTagName("th");
+			var sortDirections = Array(headers.length).fill("asc"); // Track sort direction for each column
 
-		var rowCountDisplay = document.getElementById("row-count");
-		rowCountDisplay.innerText = "Visible files: " + visibleRowCount + " of " + totalRowCount;
-	}
+			// Find the column index of the "Extension" and "Severity" and custo mcheckbox columns
+			var extensionColumnIndex = -1;
+			var severityColumnIndex = -1;
+			var checkCheckboxIndex = -1;
+			var doneCheckboxIndex = -1;
+
+			for (let i = 0; i < headers.length; i++) {
+				let headerText = headers[i].innerText.toLowerCase();
+				if (headerText === "extension") {
+					extensionColumnIndex = i;
+				}
+				if (headerText === "severity") {
+					severityColumnIndex = i;
+				}
+				if (headerText === "check") {
+					checkCheckboxIndex = i;
+				}
+				if (headerText === "done") {
+					doneCheckboxIndex = i;
+				}
+			}
+			//Generate the filter menues
+			if (severityColumnIndex !== -1) {
+				generateSeverityFilterMenu(table, severityColumnIndex);
+			}
+			if (extensionColumnIndex !== -1) {
+				generateFilterMenu(table, extensionColumnIndex);
+			}
+			if (checkCheckboxIndex !== -1 && doneCheckboxIndex !== -1) {
+				generateCheckboxFilterMenu(table, checkCheckboxIndex, doneCheckboxIndex);
+			}
+
+			//Function to mage the checkboxes navigatble by keyboard
+			document.addEventListener("keydown", function (event) {
+				// Check if the currently focused element is a checkbox
+				var activeElement = document.activeElement;
+				if (activeElement && activeElement.type === "checkbox") {
+					var currentRow = activeElement.closest("tr"); // Find the current row
+					var currentColumnIndex = activeElement.closest("td")?.cellIndex; // Find the current column index
+					if (currentRow && currentColumnIndex !== undefined) {
+						var targetRow = null;
+
+						// Detect ArrowUp or W key (Move to the same column in the row above)
+						if (event.key === "ArrowUp" || event.key.toLowerCase() === "w") {
+							targetRow = currentRow.previousElementSibling; // Get the previous row
+						}
+
+						// Detect ArrowDown or S key (Move to the same column in the row below)
+						if (event.key === "ArrowDown" || event.key.toLowerCase() === "s") {
+							targetRow = currentRow.nextElementSibling; // Get the next row
+						}
+
+						// Move focus vertically if targetRow exists
+						if (targetRow) {
+							var targetCheckbox = targetRow.cells[currentColumnIndex]?.querySelector("input[type='checkbox']");
+							if (targetCheckbox) {
+								targetCheckbox.focus(); // Move focus to the checkbox in the same column
+							}
+							event.preventDefault(); // Prevent default scrolling
+						}
+
+						// Detect ArrowLeft or A key (Move to "check" checkbox in the same row)
+						if (event.key === "ArrowLeft" || event.key.toLowerCase() === "a") {
+							var checkCheckbox = currentRow.cells[checkCheckboxIndex]?.querySelector("input[type='checkbox']");
+							if (checkCheckbox) {
+								checkCheckbox.focus(); // Move focus to the "check" checkbox
+							}
+							event.preventDefault();
+						}
+
+						// Detect ArrowRight or D key (Move to "Done" checkbox in the same row)
+						if (event.key === "ArrowRight" || event.key.toLowerCase() === "d") {
+							var doneCheckbox = currentRow.cells[doneCheckboxIndex]?.querySelector("input[type='checkbox']");
+							if (doneCheckbox) {
+								doneCheckbox.focus(); // Move focus to the "done" checkbox
+							}
+							event.preventDefault();
+						}
+
+						// Detect Space key (Toggle the current checkbox)
+						if (event.key === " " && activeElement.type === "checkbox") {
+							activeElement.checked = !activeElement.checked; // Toggle checkbox state
+							event.preventDefault(); // Prevent default page scrolling
+						}
+					}
+				}
+			});
+
+			if (headers.length > 0) { // Check if the second table has headers
+				// Loop through the headers and add the onclick event
+				for (let i = 0; i < headers.length; i++) {
+					headers[i].addEventListener("click", function() {
+						sortTable(table, i, sortDirections[i]);
+						// Toggle sort direction for the next click
+						sortDirections[i] = sortDirections[i] === "asc" ? "desc" : "asc";
+					});
+				}
+			}
+		}
+
+		function sortTable(table, columnIndex, direction) {
+			var rows = Array.from(table.rows).slice(1); // Convert HTMLCollection to array and skip the header row
+
+			// Define custom order for the first column
+			var customOrder = ["Black", "Red", "Yellow", "Green"];
+
+			// Custom sorting function
+			rows.sort(function(rowA, rowB) {
+				var x = getCellValue(rowA.cells[columnIndex]);
+				var y = getCellValue(rowB.cells[columnIndex]);
+
+				if (headers[columnIndex].innerText.toLowerCase() === "severity") {
+					// Custom sorting logic for the first column
+					var xIndex = customOrder.indexOf(x);
+					var yIndex = customOrder.indexOf(y);
+					return direction === "asc" ? xIndex - yIndex : yIndex - xIndex;
+				} else if (columnIndex === checkCheckboxIndex || columnIndex === doneCheckboxIndex) {
+					// Sorting logic for checkbox columns
+					return direction === "asc" ? (x === y ? 0 : x ? -1 : 1) : (x === y ? 0 : x ? 1 : -1);
+				} else {
+					// Alphabetical sorting for other columns
+					return direction === "asc" ? x.localeCompare(y) : y.localeCompare(x);
+				}
+			});
+
+			// Rebuild the table
+			var fragment = document.createDocumentFragment();
+			rows.forEach(function(row) {
+				fragment.appendChild(row);
+			});
+
+			table.tBodies[0].appendChild(fragment);
+		}
+
+		function getCellValue(cell) {
+			if (cell.querySelector("input[type='checkbox']")) {
+				return cell.querySelector("input[type='checkbox']").checked;
+			}
+			return cell.innerText.trim();
+		}
+		
+		function generateCheckboxFilterMenu(table, checkIndex, doneIndex) {
+			var filterMenu = document.getElementById("filter-menu");
+
+			// Create filter for "Check" checkbox
+			createCheckboxFilter(filterMenu, "Show check only", "check-checkbox", checkIndex, table);
+
+			// Create filter for "done" checkbox
+			createCheckboxFilter(filterMenu, "Hide done", "hide-done-checkbox", doneIndex, table);
+
+			// Line break and horizontal separator
+			filterMenu.appendChild(document.createElement("br"));
+			filterMenu.appendChild(document.createElement("hr"));
+			
+			// Add one "Apply Filter" button at the end of the filter menu
+			var applyButton = document.createElement("button");
+			applyButton.innerText = "Apply Filters";
+			applyButton.style.marginTop = "5px"; // Add some space above the button
+			applyButton.style.marginRight = "10px";
+			applyButton.style.width = "150px";
+			applyButton.addEventListener("click", function() {
+				applyFilters(table, extensionColumnIndex, severityColumnIndex);
+			});
+			filterMenu.appendChild(applyButton);
+			
+			// Set the save button's id and text content
+			const savebutton = document.createElement("button");
+			savebutton.id = "save-html";
+			savebutton.textContent = "Save HTML";
+			if (!document.querySelector("#save-html")) {
+				// Append the button to the body (or any other container)
+				filterMenu.appendChild(savebutton);
+			}
+
+			//Save button logic
+			document.querySelectorAll("input[type='checkbox']").forEach(checkbox => {
+				checkbox.addEventListener("change", updateCheckboxState);
+			});
+
+			// Save button logic
+			document.getElementById("save-html").addEventListener("click", saveStateToHTML);
+
+			// Add a display for the row count below the apply button
+			var rowCountDisplay = document.createElement("div");
+			rowCountDisplay.id = "row-count";
+			rowCountDisplay.style.marginTop = "15px"; // Space between button and row count
+			filterMenu.appendChild(rowCountDisplay);
+
+			updateRowCount(table);
+		}
+		
+		function createCheckboxFilter(filterMenu, labelName, className, columnIndex, table) {
+				var label = document.createElement("label");
+				label.style.display = "inline-block";
+				label.style.marginRight = "10px";
+
+				var checkbox = document.createElement("input");
+				checkbox.type = "checkbox";
+				checkbox.className = className;
+				checkbox.checked = false; // Default to checked
+
+				label.appendChild(checkbox);
+				label.appendChild(document.createTextNode(labelName));
+				filterMenu.appendChild(label);
+			}
+		
+		function generateSeverityFilterMenu(table, severityColumnIndex) {
+			var filterMenu = document.getElementById("filter-menu");
+			filterMenu.innerHTML = ''; // Clear previous content
+
+			var severityLevels = ["Black", "Red", "Yellow", "Green"];
+
+			// Create severity filter checkboxes
+			severityLevels.forEach(function(severity) {
+				var label = document.createElement("label");
+				label.style.display = "inline-block";
+				label.style.marginRight = "10px";
+
+				var checkbox = document.createElement("input");
+				checkbox.type = "checkbox";
+				checkbox.value = severity;
+				checkbox.checked = true; // Default to checked
+
+				label.appendChild(checkbox);
+				label.appendChild(document.createTextNode(severity));
+				filterMenu.appendChild(label);
+			});
+
+			// Add a line break and horizontal separator before the extension filter menu
+			filterMenu.appendChild(document.createElement("br"));
+			filterMenu.appendChild(document.createElement("hr"));
+		}
+
+		function generateFilterMenu(table, extensionColumnIndex) {
+			var filterMenu = document.getElementById("filter-menu");
+
+			var uniqueExtensions = new Set();
+
+			// Collect unique extensions from the table, case insensitive
+			Array.from(table.rows).slice(1).forEach(function(row) {
+				var extension = row.cells[extensionColumnIndex].innerText.trim().toLowerCase();
+				if (extension) {
+					uniqueExtensions.add(extension);
+				}
+			});
+
+			// Convert Set to Array and sort alphabetically (case-insensitive)
+			var sortedExtensions = Array.from(uniqueExtensions).sort((a, b) => a.localeCompare(b));
+
+			// Create checkboxes for each sorted extension
+			sortedExtensions.forEach(function(extension) {
+				var label = document.createElement("label");
+				label.style.display = "inline-block"; // Display inline for horizontal layout
+				label.style.marginRight = "10px"; // Add some space between labels
+
+				var checkbox = document.createElement("input");
+				checkbox.type = "checkbox";
+				checkbox.className = "extension-checkbox"; // Add class to distinguish from severity checkboxes
+				checkbox.value = extension;
+				checkbox.checked = true; // Default to checked
+
+				label.appendChild(checkbox);
+				label.appendChild(document.createTextNode(extension));
+				filterMenu.appendChild(label);
+			});
+
+			// Create a container for the buttons
+			var buttonContainer = document.createElement("div");
+			buttonContainer.style.marginTop = "10px"; // Add space above the container
+			buttonContainer.style.display = "flex"; // Align buttons in a single line
+			buttonContainer.style.gap = "10px"; // Add space between buttons
+
+			// Add "Select All" button
+			var selectAllButton = document.createElement("button");
+			selectAllButton.innerText = "Select All";
+			selectAllButton.addEventListener("click", function() {
+				setAllExtensionCheckboxes(true);
+			});
+			buttonContainer.appendChild(selectAllButton);
+
+			// Add "Deselect All" button
+			var deselectAllButton = document.createElement("button");
+			deselectAllButton.innerText = "Deselect All";
+			deselectAllButton.addEventListener("click", function() {
+				setAllExtensionCheckboxes(false);
+			});
+			buttonContainer.appendChild(deselectAllButton);
+
+			filterMenu.appendChild(buttonContainer);
+
+			// Line
+
+			filterMenu.appendChild(document.createElement("hr"));
+
+		}
+
+		function setAllExtensionCheckboxes(checked) {
+			var checkboxes = document.querySelectorAll("#filter-menu input.extension-checkbox");
+			checkboxes.forEach(function(checkbox) {
+				checkbox.checked = checked;
+			});
+		}
+
+		function applyFilters(table, extensionColumnIndex, severityColumnIndex) {
+			showLoadingIndicator();
+
+			setTimeout(function() { // Simulate processing time
+				var severityCheckboxes = document.querySelectorAll("#filter-menu input[type='checkbox'][value]");
+				var selectedSeverities = Array.from(severityCheckboxes)
+											.filter(checkbox => checkbox.checked)
+											.map(checkbox => checkbox.value);
+
+				var extensionCheckboxes = document.querySelectorAll("#filter-menu input.extension-checkbox");
+				var selectedExtensions = Array.from(extensionCheckboxes)
+											.filter(checkbox => checkbox.checked)
+											.map(checkbox => checkbox.value);
+											
+				var checkFilter = document.querySelector("#filter-menu input.check-checkbox").checked;
+				var hidedoneFilter = document.querySelector("#filter-menu input.hide-done-checkbox").checked;
+
+				// Apply filters in a single pass
+				Array.from(table.rows).slice(1).forEach(function(row) {
+					var severity = row.cells[severityColumnIndex].innerText.trim();
+					var extension = row.cells[extensionColumnIndex].innerText.trim().toLowerCase();
+					var check = row.cells[checkCheckboxIndex].querySelector("input[type='checkbox']").checked;
+					var done = row.cells[doneCheckboxIndex].querySelector("input[type='checkbox']").checked;
+
+					var showRow = selectedSeverities.includes(severity) && selectedExtensions.includes(extension) && (checkFilter ? check : true) && (!hidedoneFilter || !done);
+					row.style.display = showRow ? "" : "none";
+				});
+
+				updateRowCount(table);
+
+				hideLoadingIndicator();
+			}, 0); // Execute after a short delay
+		}
+
+		function showLoadingIndicator() {
+			var loadingIndicator = document.createElement("div");
+			loadingIndicator.id = "loading-indicator";
+			loadingIndicator.innerText = "Filtering, please wait...";
+			loadingIndicator.style.position = "fixed";
+			loadingIndicator.style.top = "50%";
+			loadingIndicator.style.left = "50%";
+			loadingIndicator.style.transform = "translate(-50%, -50%)";
+			loadingIndicator.style.padding = "20px";
+			loadingIndicator.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
+			loadingIndicator.style.color = "white";
+			loadingIndicator.style.borderRadius = "5px";
+			loadingIndicator.style.zIndex = "1000";
+			document.body.appendChild(loadingIndicator);
+		}
+
+		function hideLoadingIndicator() {
+			var loadingIndicator = document.getElementById("loading-indicator");
+			if (loadingIndicator) {
+				loadingIndicator.remove();
+			}
+		}
+
+		function updateRowCount(table) {
+			var totalRowCount = table.rows.length - 1; // Subtract 1 to exclude the header row
+			var visibleRowCount = Array.from(table.rows).slice(1).filter(row => row.style.display !== "none").length;
+
+			var rowCountDisplay = document.getElementById("row-count");
+			rowCountDisplay.innerText = "Visible files: " + visibleRowCount + " of " + totalRowCount;
+		}
 
 });
 
 
-
+// Severity coloring
 document.addEventListener('DOMContentLoaded', () => {
 
     // ========================= SEVERITY COLORS =========================
-    document.querySelectorAll('table td:first-of-type').forEach(td => {
+    document.querySelectorAll('table td:nth-of-type(3)').forEach(td => {
         switch (td.textContent.trim()) {
             case 'Black':
                 td.style.backgroundColor = '#333';
@@ -639,8 +778,261 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
+
+
 </script>
 "@
+
+# CSS part
+# TODO: Avoid doublicate stuff
+if ($LightMode) {
+$css = @"
+<style>
+	body {
+		font-family: Arial, Helvetica, sans-serif;
+		font-size: 14px;
+		margin: 0;
+		padding: 0;
+	}
+	h2 {
+		font-family: Arial, Helvetica, sans-serif;
+		color: #000099;
+		font-size: 20px;
+		font-weight: bold;
+	}
+	table {
+		font-size: 14px;
+		border: 0px; 
+		font-family: Arial, Helvetica, sans-serif;
+	} 
+
+	td {
+		padding: 4px;
+		margin: 0px;
+		border: 0;
+	}
+
+	table td:nth-child(3),
+	table td:nth-child(9),
+	table td:nth-child(10) {
+		text-align: center;
+		vertical-align: middle;
+	}
+	
+	th {
+		background: #395870;
+		background: linear-gradient(#49708f, #293f50);
+		color: #fff;
+		font-size: 14px;
+		padding: 5px 7px;
+		vertical-align: middle;
+		position: sticky;
+		top: 0;
+		cursor: pointer;
+	}
+
+	tbody tr:nth-child(even) {
+		background: #f0f0f2;
+	}
+
+	tbody tr:hover td {
+		background-color: lightblue;
+	}
+
+	/* Button Styling */
+	button {
+		background-color:rgb(106, 145, 230); /* Green background */
+		border: none; /* Remove border */
+		color: white; /* White text */
+		padding: 10px 10px; /* Add padding */
+		text-align: center; /* Center text */
+		text-decoration: none; /* Remove underline */
+		display: inline-block; /* Inline-block layout */
+		font-size: 12px; /* Font size */
+		margin: 5px 2px; /* Margin between buttons */
+		cursor: pointer; /* Pointer cursor on hover */
+		border-radius: 5px; /* Rounded corners */
+		transition: background-color 0.3s, transform 0.2s; /* Smooth transitions */
+	}
+
+	/* Hover Effects */
+	button:hover {
+		background-color: rgb(74, 124, 231);
+		transform: scale(1.05); /* Slight zoom effect */
+	}
+
+	/* Active State */
+	button:active {
+		background-color:rgb(52, 110, 235);
+		transform: scale(0.98); /* Slightly smaller when clicked */
+	}
+
+	input[type="checkbox"] {
+			width: 14px;
+			height: 14px;
+			margin: 4px;
+			background-color: #fff;
+			border: 2px solid #ccc;
+			border-radius: 3px;
+			display: inline-block;
+			cursor: pointer;
+			transition: background-color 0.2s, border-color 0.2s;
+		}
+
+	/* Checkbox Hover Effect */
+	input[type="checkbox"]:hover {
+		border-color: #888;
+	}
+
+	.icon {
+		font-size: 20px; /* Adjust size of the icon */
+		line-height: 1; /* Prevent extra spacing around the icon */
+		display: inline-block; /* Makes it easier to control size and alignment */
+		width: 24px; /* Ensures a consistent width */
+		height: 24px; /* Ensures a consistent height */
+		text-align: center; /* Centers the icon */
+	}
+
+	/* Optional: Hover effect */
+	.icon:hover {
+		transform: scale(1.2); /* Slightly enlarge the icon */
+		transition: transform 0.2s ease, color 0.2s ease;
+	}
+</style>
+"@
+
+} else {
+$css = @"
+<style>
+	body {
+	background-color: #121212;
+	color: #E0E0E0;
+	font-family: Arial, Helvetica, sans-serif;
+	font-size: 14px;
+	margin: 0;
+	padding: 0;
+	}
+
+	h2 {
+		font-family: Arial, Helvetica, sans-serif;
+		color: #BB86FC;
+		font-size: 24px;
+		font-weight: bold;
+	}
+
+	table {
+		width: auto;
+		max-width: 100%;
+		margin-top: 5px;
+		border-collapse: collapse;
+		font-size: 14px;
+		background-color: #1E1E1E;
+		color: #E0E0E0;
+	}
+
+	th {
+		background: #282a36;
+		color: #E0E0E0;
+		font-size: 14px;
+		font-weight: bold;
+		padding: 8px;
+		text-align: left;
+		border-bottom: 2px solid #838383;
+		border: 1px solid #333;
+		position: sticky;
+		top: 0;
+	}
+
+	td {
+		padding: 6px; 
+		border: 1px solid #333;
+	}
+
+
+	table td:nth-child(3),
+	table td:nth-child(9),
+	table td:nth-child(10) {
+		text-align: center;
+		vertical-align: middle;
+	}
+
+	tbody tr:nth-child(even) {
+		background-color: #1A1A1A;
+	}
+
+	tbody tr:nth-child(odd) {
+		background-color: #2A2A2A;
+	}
+
+	tbody tr:hover td {
+		background-color: #444 !important;
+	}
+
+
+	/* Button Styling */
+	button {
+		background-color:rgb(106, 145, 230); /* Green background */
+		border: none; /* Remove border */
+		color: white; /* White text */
+		padding: 10px 10px; /* Add padding */
+		text-align: center; /* Center text */
+		text-decoration: none; /* Remove underline */
+		display: inline-block; /* Inline-block layout */
+		font-size: 12px; /* Font size */
+		margin: 5px 2px; /* Margin between buttons */
+		cursor: pointer; /* Pointer cursor on hover */
+		border-radius: 5px; /* Rounded corners */
+		transition: background-color 0.3s, transform 0.2s; /* Smooth transitions */
+	}
+
+	/* Hover Effects */
+	button:hover {
+		background-color: rgb(74, 124, 231); /* Slightly darker green */
+		transform: scale(1.05); /* Slight zoom effect */
+	}
+
+	/* Active State */
+	button:active {
+		background-color:rgb(52, 110, 235); /* Even darker green */
+		transform: scale(0.98); /* Slightly smaller when clicked */
+	}
+	input[type="checkbox"] {
+			width: 14px;
+			height: 14px;
+			margin: 4px;
+			background-color: #fff;
+			border: 2px solid #ccc;
+			border-radius: 3px;
+			display: inline-block;
+			cursor: pointer;
+			transition: background-color 0.2s, border-color 0.2s;
+		}
+
+	/* Checkbox Hover Effect */
+	input[type="checkbox"]:hover {
+		border-color: #888;
+	}
+	.icon {
+		font-size: 20px; /* Adjust size of the icon */
+		line-height: 1; /* Prevent extra spacing around the icon */
+		display: inline-block; /* Makes it easier to control size and alignment */
+		width: 24px; /* Ensures a consistent width */
+		height: 24px; /* Ensures a consistent height */
+		text-align: center; /* Centers the icon */
+	}
+
+	/* Optional: Hover effect */
+	.icon:hover {
+		transform: scale(1.2); /* Slightly enlarge the icon */
+		transition: transform 0.2s ease, color 0.2s ease;
+	}
+
+</style>
+"@
+
+}
+
+
 
 $titleAndFilter = @"
 <h2>Files</h2>
@@ -650,7 +1042,7 @@ $titleAndFilter = @"
 	write-host "[*] Store: $($outputname)_loot_$($name).html"
 	$inputInfo = $baseInfo | ConvertTo-Html -As List -Fragment -PreContent "<h2>Input Information</h2>"
 	$mainTable = $object | ConvertTo-Html -Fragment -PreContent $titleAndFilter
-	$htmlOutput = ConvertTo-Html -Head $Header -Body "$inputInfo $mainTable"
+	$htmlOutput = ConvertTo-Html -Head $css,$Header -Body "$inputInfo $mainTable"
 
 	#Replace placeholder strings
 	$htmlOutput = $htmlOutput -replace '@@o@@','<'
@@ -709,7 +1101,7 @@ if (!(Test-Path -Path $in -PathType Leaf)) {
 
 		$firstLine = Get-Content $in -TotalCount 1
 
-		# Define the regular expression pattern to extract Computername, USer and timestamp
+		# Define the regular expression pattern to extract Computername, User and timestamp
 		$pattern = '\[(?<machine>.*?)\\(?<user>.*?)@.*?\]\s+(?<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}Z)'
 
 
@@ -754,7 +1146,24 @@ write-host "[*] Processing files"
 
 $files = foreach ($line in $data) {
     if($line.Typ -eq "[File]" -and $line.9 -ne $Null) {
+		$content = $line.10
+
+		if ($unescape) {
+			try {
+				# Attempt to unescape the content
+				$content = [System.Text.RegularExpressions.Regex]::Unescape($content)
+			} catch {
+				# Suppress the error message
+				$content = $content
+			}
+			#Format HTML
+			$content = $content -replace ([regex]::Escape("`t")),'@@a@@emsp;'
+			$content = $content -replace ([regex]::Escape("`r`n")),'@@o@@br@@c@@'
+		}
+
 		[PsCustomObject]@{
+			check = "@@o@@input type=checkbox value=HighValue@@c@@"
+			done = "@@o@@input type=checkbox value=done@@c@@"
 			severity = $line.1
 			rule = $line.2
 			keyword = $line.6
@@ -762,9 +1171,9 @@ $files = foreach ($line in $data) {
 			unc = $line.9
 			extension = [System.IO.Path]::GetExtension($($line.9))
 			#Since HTML chars are encoded to entities, special strings are used and replaced later
-			open = "@@o@@a target=_blank href=file://$($(Split-Path -Parent $($line.9)).Replace(' ','%20'))\ @@c@@@@o@@span style='font-size:100px;'@@c@@@@a@@#x1F4C2;@@o@@/span@@c@@"
-			save = "@@o@@a target=_blank href=file://$($($line.9).Replace(' ','%20')) download@@c@@@@o@@span style='font-size:100px;'@@c@@@@a@@#x1F4BE;@@o@@/span@@c@@"
-			content = $line.10
+			open = "@@o@@a target=_blank href=file://$($(Split-Path -Parent $($line.9)).Replace(' ','%20'))\ @@c@@@@o@@span class=icon @@c@@@@a@@#x1F4C2;@@o@@/span@@c@@"
+			save = "@@o@@a target=_blank href=file://$($($line.9).Replace(' ','%20')) download@@c@@@@o@@span class=icon @@c@@@@a@@#x1F4BE;@@o@@/span@@c@@"
+			content = $content
 		}
     }
 }

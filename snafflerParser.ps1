@@ -99,6 +99,7 @@ Param (
 )
 
 # Function section-----------------------------------------------------------------------------------
+
 function gridview($action){
 	if ($action -eq "load") {
 		write-host "[*] Loading stored Gridview file: $($gridin)"
@@ -122,7 +123,7 @@ function gridview($action){
 			exit
 		} else {
 			write-host "[-] Explorer++ found at $exlorerpp"
-			write-host "[*] Found $($countpassthruobjec.lines) object. Trying to open them in explorer++"
+			write-host "[*] Found $($countpassthruobjec.lines) object. Trying to open them in Explorer++ "
 			write-host "[i] Start the script in console window runas ... /netonly to access the files as different user"
 			write-host "[i] Disables the 'Allow multiple instance' in Explorer++ to open multiple location in tabs "
 			foreach ($path in $passthruobjec.unc) {
@@ -135,7 +136,7 @@ function gridview($action){
 	} else {
 		write-host "[!] No PassThru object found"
 	}
-	write-host "[*] Exiting..."
+	write-host "[*] Exiting"
 	exit
 }
 
@@ -148,7 +149,7 @@ function explorerpp($objects){
 
 
 		#Delete existing bookmarks
-		write-host "[*] Delete existing bookmarks."
+		write-host "[*] Deleting existing bookmarks"
 		$todelete = $xmlfile.SelectNodes("//Bookmark[@Type='1']")
 		foreach($node in $todelete) {
 			$node.ParentNode.RemoveChild($node)| Out-Null
@@ -207,7 +208,7 @@ function explorerpp($objects){
 			$counteruncstats++
 		}
 		
-		#Handle local folder because xml.save can't...
+		#Handle local folder because xml.save can't
 		if ($explorerppfolder -eq ".") {
 			$xmlfile.Save("$pwd\config.xml")
 		} else {
@@ -226,19 +227,19 @@ function explorerpp($objects){
 
 # Function to export as CSV
 function exportcsv($object ,$name){
-	write-host "[*] Store: $($outputname)_loot_$($name).csv"
+	write-host "[*] Storing: $($outputname)_loot_$($name).csv"
 	$object | select-object severity,rule,keyword,modified,extension,unc,content | Export-Csv -Path "$($outputname)_loot_$($name).csv" -NoTypeInformation
 }
 
 # Function to export as TXT
 function exporttxt($object ,$name){
-	write-host "[*] Store: $($outputname)_loot_$($name).txt"
+	write-host "[*] Storing: $($outputname)_loot_$($name).txt"
 	$object | Format-Table severity,rule,keyword,modified,extension,unc,content -AutoSize | Out-String -Width 10000 | Out-File -FilePath "$($outputname)_loot_$($name).txt"
 }
 
 # Function to export as JSON
 function exportjson($object ,$name){
-	write-host "[*] Store: $($outputname)_loot_$($name).json"
+	write-host "[*] Storing: $($outputname)_loot_$($name).json"
 	$object | select-object severity,rule,keyword,modified,extension,unc,content | ConvertTo-Json -depth 100  | Out-File -FilePath "$($outputname)_loot_$($name).json"
 }
 
@@ -1039,7 +1040,7 @@ $titleAndFilter = @"
 <div id="filter-menu"></div><br>
 "@
 
-	write-host "[*] Store: $($outputname)_loot_$($name).html"
+	write-host "[*] Storing: $($outputname)_loot_$($name).html"
 	$inputInfo = $baseInfo | ConvertTo-Html -As List -Fragment -PreContent "<h2>Input Information</h2>"
 	$mainTable = $object | ConvertTo-Html -Fragment -PreContent $titleAndFilter
 	$htmlOutput = ConvertTo-Html -Head $css,$Header -Body "$inputInfo $mainTable"
@@ -1061,10 +1062,11 @@ $banner = @"
 \___ \|  _ \ / _  | |_| |_| |/ _ \ '__| | |_) / _  | '__/ __|/ _ \ '__|
  ___) | | | | (_| |  _|  _| |  __/ |    |  __/ (_| | |  \__ \  __/ |   
 |____/|_| |_|\__,_|_| |_| |_|\___|_|    |_|   \__,_|_|  |___/\___|_|   
-																	   																								
+
 "@
 
-Write-Host $banner
+Write-Host $banner -ForegroundColor Cyan
+
 
 # Check if snaffler should be executed
 if ($help) {
@@ -1082,15 +1084,20 @@ if ($gridviewload) {
 }
 
 # Check snaffler input file and load it
-write-host "[*] Check input file $in"
+write-host "[*] Checking input file $in"
 if (!(Test-Path -Path $in -PathType Leaf)) {
 	write-host "[-] Input file not found $in"
 	exit
 } else {
 	write-host "[+] Input file exists"
-	$inputlines = (Get-Content $in).Length
-	if ($inputlines -ge 1) {
-		write-host "[+] Input file has $inputlines Lines"
+
+	#Check if file size is  at least 300 bytes
+	$FileSize = (Get-ChildItem $in).Length / 1014
+	$FileSizeRound = [math]::Round($FileSize,2)
+
+	if ($FileSizeRound -ge 0.3) {
+		write-host "[+] Input file is $FileSizeRound KB"
+		write-host "[*] Importing data from file"
 		$data = Import-Csv -Delimiter "`t" -Path $in -Header user, timestamp , typ, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
 		$outputname = (Get-Item $in).BaseName
 
@@ -1110,13 +1117,14 @@ if (!(Test-Path -Path $in -PathType Leaf)) {
 			$baseInfo | Add-Member -NotePropertyName Snaffler_User -NotePropertyValue $matches['user']
 			$baseInfo | Add-Member -NotePropertyName Snaffler_StartTime -NotePropertyValue $matches['timestamp']
 		}
+
 	} else {
-		write-host "[!] Input file seems to be empty"
+		write-host "[!] Input file is less than 0.3 KB"
 		exit
 	}
 
 }
-
+write-host "[*] Processing shares"
 # Processing shares
 $shares = foreach ($line in $data) {
     if($line.Typ -eq "[Share]") {
@@ -1126,6 +1134,7 @@ $shares = foreach ($line in $data) {
     }
 }
 
+
 #Sort and perform dedup (in case snaffler was runned twice)
 $shares = $shares | Sort-Object -Property unc -Unique
 
@@ -1133,13 +1142,12 @@ $shares = $shares | Sort-Object -Property unc -Unique
 $sharescount = $shares | Measure-Object -Line -Property unc
 if ($sharescount.lines -ge 1) {
 	write-host "[+] Shares identified: $($sharescount.lines)"
-	write-host "[*] Write share output file"
+	write-host "[*] Writing share output file"
 	$shares | Format-Table -AutoSize | Out-File -FilePath "$($outputname)_shares.txt"
 } else {
 	write-host "[!] Shares identified: 0"
 	write-host "[?] Was Snaffler executed with parameter -y ?"
 }
-
 
 # Processing files
 write-host "[*] Processing files"
@@ -1204,6 +1212,7 @@ if ($blacks -ne $null) {$blackscount = $blacks | Measure-Object -Line -Property 
 if ($reds -ne $null) {$redscount  = $reds | Measure-Object -Line -Property unc | select-object -ExpandProperty Lines} else {$redscount = 0}
 if ($yellows -ne $null) {$yellowscount = $yellows | Measure-Object -Line -Property unc | select-object -ExpandProperty Lines} else {$yellowscount = 0}
 if ($greens -ne $null) {$greenscount = $greens | Measure-Object -Line -Property unc | select-object -ExpandProperty Lines} else {$greenscount = 0}
+
 
 $filesum = $blackscount + $redscount + $yellowscount + $greenscount
 if ($filesum -ge 1) {
@@ -1307,7 +1316,6 @@ if ($filesum -ge 1) {
 	write-host "[?] Was Snaffler executed with parameter -y ?"
 	exit
 }
-
 # Start grid view if desired
 if ($gridview) {
 	gridview start
@@ -1315,6 +1323,6 @@ if ($gridview) {
 
 # Check if shares should be exported as bookmarks to Explorer++
 if ($pte) {
-	write-host "[*] Will export $($sharescount.lines) shares to explorer."
+	write-host "[*] Will export $($sharescount.lines) shares to explorer"
 	explorerpp($shares)
 }

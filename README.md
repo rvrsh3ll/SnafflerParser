@@ -109,6 +109,12 @@ This allows easy access to the shares without authenticate for every share via t
 
 ## Changelog
 
+### 2025-01-25
+
+#### Improved
+- Slightly improved performance
+- Adjusted status messages
+
 ### 2025-01-21
 
 #### New
